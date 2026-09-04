@@ -35,6 +35,8 @@ docker compose up --build
 
 ## Запуск локально
 
+Требуется Node.js 20.x
+
 ```bash
 npm install
 cp .env.example .env # Исправить локально
