@@ -78,3 +78,64 @@ npx run test:race
 ## Затраченное время
 
 Ушло около 12-14ч.
+
+## Примеры запросов (curl)
+
+**Каталог (с пагинацией):**
+
+```bash
+curl http://localhost:3000/products
+```
+
+**Создать заказ:**
+
+```bash
+curl -X POST http://localhost:3000/orders \
+  -H "Content-Type: application/json" \
+  -d '{"sku": "GIFT-PSN-1000"}'
+```
+
+Ответ содержит `id` - используется дальше как `order_id`.
+
+**Получить заказ по id:**
+
+```bash
+curl http://localhost:3000/orders/ORDER_ID
+```
+
+**Отправить вебхук оплаты:**
+
+```bash
+curl -X POST http://localhost:3000/webhook/payment \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_id": "evt_test_1",
+    "order_id": "ORDER_ID",
+    "status": "paid",
+    "amount": 1990,
+    "currency": "RUB",
+    "created_at": "2026-01-01T12:00:00Z"
+  }'
+```
+
+**Сверка (расхождения оплата/выдача):**
+
+```bash
+curl http://localhost:3000/reconciliation/paid-not-delivered
+curl http://localhost:3000/reconciliation/delivered-not-paid
+```
+
+**Проверка идемпотентности** - повторно отправить тот же вебхук с тем же `event_id`, статус/остаток не должны измениться:
+
+```bash
+curl -X POST http://localhost:3000/webhook/payment \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_id": "evt_test_1",
+    "order_id": "ORDER_ID",
+    "status": "paid",
+    "amount": 1990,
+    "currency": "RUB",
+    "created_at": "2026-01-01T12:00:00Z"
+  }'
+```
