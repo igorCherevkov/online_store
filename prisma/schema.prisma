@@ -1,0 +1,101 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrderStatus {
+  created
+  paid
+  delivering
+  delivered
+  payment_failed
+  out_of_stock
+  delivery_failed
+}
+
+enum PaymentStatus {
+  paid
+  failed
+}
+
+model Product {
+  sku String @id
+  name String
+  price Int
+  currency String
+  type String
+  image    String
+  availableCount Int @default(0)
+
+  orders Order[]
+  gameKeys GameKey[]
+
+  @@index([availableCount])
+}
+
+model Order {
+  id String @id @default(cuid())
+  sku String
+  product Product @relation(fields: [sku], references: [sku])
+  status OrderStatus @default(created)
+  amount Int
+  currency String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  payments Payment[]
+  gameKey GameKey?
+  deliveryAttempts DeliveryAttempt[]
+
+  @@index([status])
+}
+
+model Payment {
+  id String @id @default(cuid())
+  eventId String @unique
+  orderId String
+  order Order @relation(fields: [orderId], references: [id])
+  status PaymentStatus
+  payload Json
+  processedAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model GameKey {
+  id String @id @default(cuid())
+  sku String
+  product Product @relation(fields: [sku], references: [sku])
+  code String @unique
+  orderId String? @unique
+  order Order? @relation(fields: [orderId], references: [id])
+  reservedAt DateTime?
+
+  @@index([sku, orderId])
+}
+
+model DeliveryAttempt {
+  id String @id @default(cuid())
+  requestId String
+  attemptNumber Int
+  orderId String
+  order Order @relation(fields: [orderId], references: [id])
+  provider String
+  status String
+  code String?
+  createdAt DateTime @default(now())
+
+  @@unique([requestId, attemptNumber])
+  @@index([orderId])
+}
