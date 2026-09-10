@@ -87,32 +87,66 @@ export class DeliveryService {
     const requestId = `req_${orderItemId}_${provider.name}`;
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-      const res = await this.callWithTimeout(provider, {
+      let res = await this.callWithTimeout(provider, {
         request_id: requestId,
         sku,
         order_id: orderItemId,
       });
 
+      if (res.status === 'error' && res.message !== 'out_of_stock') {
+        const check = await provider.checkStatus(requestId);
+
+        if (check.status === 'ok') {
+          this.logger.warn(
+            `[${provider.name}] lied about error for ${requestId}`,
+          );
+        }
+
+        res = check;
+      }
+
       const status = res.status;
       const code = res.status === 'ok' ? res.code : null;
 
-      await this.prisma.deliveryAttempt.create({
-        data: {
-          requestId,
-          attemptNumber: attempt,
-          orderItemId,
-          provider: provider.name,
-          status,
-          code,
-        },
-      });
-
       if (res.status === 'ok') {
-        return { ok: true, code: res.code };
-      }
+        const assignCode = await this.gameKeysService.codeToItem(
+          res.code,
+          orderItemId,
+        );
 
-      if (res.status === 'error' && res.reason === 'out_of_stock') {
-        return { ok: false, outOfStock: true };
+        await this.prisma.deliveryAttempt.create({
+          data: {
+            requestId,
+            attemptNumber: attempt,
+            orderItemId,
+            provider: provider.name,
+            status: assignCode.ok ? 'ok' : 'conflict',
+            code: assignCode.ok ? res.code : null,
+          },
+        });
+
+        if (assignCode.ok) {
+          return { ok: true, code: res.code };
+        }
+
+        this.logger.error(
+          `[${provider.name}] returned a code already assigner, requestId = ${requestId}, orderItem = ${orderItemId}`,
+        );
+      } else {
+        await this.prisma.deliveryAttempt.create({
+          data: {
+            requestId,
+            attemptNumber: attempt,
+            orderItemId,
+            provider: provider.name,
+            status,
+            code,
+          },
+        });
+
+        if (res.status === 'error' && res.reason === 'out_of_stock') {
+          return { ok: false, outOfStock: true };
+        }
       }
 
       this.logger.warn(

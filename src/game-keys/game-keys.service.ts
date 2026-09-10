@@ -20,6 +20,14 @@ export class GameKeysService {
   }
 
   async reserveKey(sku: string, orderItemId: string): Promise<string | null> {
+    const existing = await this.prisma.gameKey.findUnique({
+      where: { orderItemId },
+    });
+
+    if (existing) {
+      return existing.code;
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const result = await tx.$queryRaw<{ code: string }[]>(
         Prisma.sql`
@@ -53,15 +61,18 @@ export class GameKeysService {
     code: string,
     orderItemId: string,
   ): Promise<{ ok: boolean; conflict?: boolean }> {
-    try {
-      await this.prisma.gameKey.update({
-        where: { code, orderItemId: null },
-        data: { orderItemId, reservedAt: new Date() },
-      });
+    const res = await this.prisma.gameKey.updateMany({
+      where: { code, OR: [{ orderItemId: null }, { orderItemId }] },
+      data: { orderItemId, reservedAt: new Date() },
+    });
 
-      return { ok: true };
-    } catch {
-      return { ok: false, conflict: true };
-    }
+    return { ok: res.count === 1 };
+  }
+
+  async releaseCodeFromItem(orderItemId: string): Promise<void> {
+    await this.prisma.gameKey.updateMany({
+      where: { orderItemId },
+      data: { orderItemId: null, reservedAt: null },
+    });
   }
 }

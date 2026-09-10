@@ -11,4 +11,5 @@ export type ProviderResponse =
 export interface DeliveryProvider {
   readonly name: string;
   request(req: ProviderRequest): Promise<ProviderResponse>;
+  checkStatus(requestId: string): Promise<ProviderResponse>;
 }
