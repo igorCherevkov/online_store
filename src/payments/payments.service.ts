@@ -6,8 +6,9 @@ import { Prisma } from '@prisma/client';
 
 interface OrderRow {
   id: string;
-  sku: string;
   status: string;
+  totalAmount: number;
+  currency: string;
 }
 
 @Injectable()
@@ -22,7 +23,7 @@ export class PaymentService {
   async handleWebhook(dto: PaymentWebhookDto): Promise<{ status: string }> {
     const out = await this.prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<OrderRow[]>(
-        Prisma.sql`SELECT id, sku, status FROM "Order" WHERE id = ${dto.order_id} FOR UPDATE`,
+        Prisma.sql`SELECT id, status, "totalAmount", currency FROM "Order" WHERE id = ${dto.order_id} FOR UPDATE`,
       );
       const order = rows[0];
 
@@ -69,16 +70,46 @@ export class PaymentService {
         return { shouldDeliver: false };
       }
 
+      await tx.moneyRecord.create({
+        data: {
+          orderId: order.id,
+          type: 'charge',
+          amount: order.totalAmount,
+          currency: order.currency,
+        },
+      });
+
       await tx.order.update({
         where: { id: order.id },
         data: { status: 'paid' },
       });
 
-      return { shouldDeliver: true, orderId: order.id, sku: order.sku };
+      const items = await tx.orderItem.findMany({
+        where: { orderId: order.id },
+      });
+
+      return { shouldDeliver: true, orderId: order.id, items };
     });
 
     if (out.shouldDeliver) {
-      await this.delivery.deliver(out?.orderId, out?.sku);
+      await Promise.all(
+        out.items.map((item) => this.delivery.deliver(item.id, item.sku)),
+      );
+
+      const items = await this.prisma.orderItem.findMany({
+        where: { orderId: out.orderId },
+      });
+
+      const checkDeliver = items.every(
+        (i) => i.status === 'delivered' || i.status === 'refunded',
+      );
+
+      if (checkDeliver) {
+        await this.prisma.order.update({
+          where: { id: out.orderId },
+          data: { status: 'completed' },
+        });
+      }
     }
 
     return { status: 'ok' };

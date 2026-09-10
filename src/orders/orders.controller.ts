@@ -13,6 +13,6 @@ export class OrdersController {
 
   @Post()
   create(@Body() dto: CreateOrderDto) {
-    return this.orders.create(dto.sku);
+    return this.orders.create(dto.items.map((i) => i.sku));
   }
 }

@@ -18,18 +18,28 @@ export class OrdersService {
     return order;
   }
 
-  async create(sku: string) {
-    const product = await this.products.findBySku(sku);
-    if (!product) {
-      throw new NotFoundException('product not found');
-    }
+  async create(skus: string[]) {
+    const items = await Promise.all(
+      skus.map(async (sku) => {
+        const product = await this.products.findBySku(sku);
+        return {
+          sku: product.sku,
+          amount: product.price,
+          currency: product.currency,
+        };
+      }),
+    );
+
+    const totalAmount = items.reduce((sum, i) => sum + i.amount, 0);
+    const currency = items[0].currency;
 
     return this.prisma.order.create({
       data: {
-        sku: product.sku,
-        amount: product.price,
-        currency: product.currency,
+        totalAmount,
+        currency,
+        items: { create: items },
       },
+      include: { items: true },
     });
   }
 }

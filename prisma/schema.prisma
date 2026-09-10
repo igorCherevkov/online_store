@@ -17,16 +17,27 @@ datasource db {
 enum OrderStatus {
   created
   paid
+  payment_failed
+  completed
+}
+
+enum OrderItemStatus {
+  pending
   delivering
   delivered
-  payment_failed
   out_of_stock
   delivery_failed
+  refunded
 }
 
 enum PaymentStatus {
   paid
   failed
+}
+
+enum MoneyRecordType {
+  charge 
+  refund
 }
 
 model Product {
@@ -38,7 +49,7 @@ model Product {
   image    String
   availableCount Int @default(0)
 
-  orders Order[]
+  orderItems OrderItem[]
   gameKeys GameKey[]
 
   @@index([availableCount])
@@ -46,18 +57,36 @@ model Product {
 
 model Order {
   id String @id @default(cuid())
-  sku String
-  product Product @relation(fields: [sku], references: [sku])
   status OrderStatus @default(created)
-  amount Int
+  totalAmount Int
   currency String
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
   payments Payment[]
+  items OrderItem[]
+  moneyRecord MoneyRecord[]
+
+  @@index([status])
+}
+
+model OrderItem {
+  id String @id @default(cuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id])
+  sku String
+  product Product @relation(fields: [sku], references: [sku])
+  amount Int
+  currency String
+  status OrderItemStatus @default(pending)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   gameKey GameKey?
   deliveryAttempts DeliveryAttempt[]
+  moneyRecords MoneyRecord[]
 
+  @@index([orderId])
   @@index([status])
 }
 
@@ -78,24 +107,39 @@ model GameKey {
   sku String
   product Product @relation(fields: [sku], references: [sku])
   code String @unique
-  orderId String? @unique
-  order Order? @relation(fields: [orderId], references: [id])
+  orderItemId String? @unique
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id])
   reservedAt DateTime?
 
-  @@index([sku, orderId])
+  @@index([sku, orderItemId])
 }
 
 model DeliveryAttempt {
   id String @id @default(cuid())
   requestId String
   attemptNumber Int
-  orderId String
-  order Order @relation(fields: [orderId], references: [id])
+  orderItemId String
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id])
   provider String
   status String
   code String?
   createdAt DateTime @default(now())
 
   @@unique([requestId, attemptNumber])
+  @@index([orderItemId])
+}
+
+model MoneyRecord {
+  id String @id @default(cuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id])
+  orderItemId String?
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id])
+  type MoneyRecordType
+  amount Int
+  currency String
+  createdAt DateTime @default(now())
+
+  @@unique([orderItemId, type])
   @@index([orderId])
 }

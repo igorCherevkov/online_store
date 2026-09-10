@@ -8,26 +8,26 @@ type PrismaOrmTX = PrismaService | Prisma.TransactionClient;
 export class GameKeysService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findKeyByOrderId(
-    orderId: string,
+  async findKeyByOrderItemId(
+    orderItemId: string,
     tx?: PrismaOrmTX,
   ): Promise<string | null> {
     const client = tx ?? this.prisma;
 
-    const gameKey = await client.gameKey.findUnique({ where: { orderId } });
+    const gameKey = await client.gameKey.findUnique({ where: { orderItemId } });
 
     return gameKey?.code ?? null;
   }
 
-  async reserveKey(sku: string, orderId: string): Promise<string | null> {
+  async reserveKey(sku: string, orderItemId: string): Promise<string | null> {
     return this.prisma.$transaction(async (tx) => {
       const result = await tx.$queryRaw<{ code: string }[]>(
         Prisma.sql`
           UPDATE "GameKey"
-          SET "orderId" = ${orderId}, "reservedAt" = now()
+          SET "orderItemId" = ${orderItemId}, "reservedAt" = now()
           WHERE id = (
             SELECT id FROM "GameKey"
-            WHERE sku = ${sku} AND "orderId" IS NULL
+            WHERE sku = ${sku} AND "orderItemId" IS NULL
             LIMIT 1
             FOR UPDATE SKIP LOCKED
           )
@@ -47,5 +47,21 @@ export class GameKeysService {
 
       return code;
     });
+  }
+
+  async codeToItem(
+    code: string,
+    orderItemId: string,
+  ): Promise<{ ok: boolean; conflict?: boolean }> {
+    try {
+      await this.prisma.gameKey.update({
+        where: { code, orderItemId: null },
+        data: { orderItemId, reservedAt: new Date() },
+      });
+
+      return { ok: true };
+    } catch {
+      return { ok: false, conflict: true };
+    }
   }
 }

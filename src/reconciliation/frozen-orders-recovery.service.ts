@@ -25,24 +25,24 @@ export class FrozenOrdersRecovery {
     this.isRunning = true;
 
     try {
-      const frozenOrders = await this.reconciliationService.findFrozenOrders();
+      const frozenItems = await this.reconciliationService.findFrozenOrders();
 
-      if (frozenOrders.length === 0) {
+      if (frozenItems.length === 0) {
         return;
       }
 
-      this.logger.log(`Count of frozen orders: ${frozenOrders.length}`);
+      this.logger.log(`Count of frozen order items: ${frozenItems.length}`);
 
-      for (const order of frozenOrders) {
+      for (const item of frozenItems) {
         try {
           this.logger.log(
-            `Retry attempt: order ${order.id}, status: ${order.status}`,
+            `Retry attempt: orderItem ${item.id}, status: ${item.status}`,
           );
 
-          await this.deliveryService.deliver(order.id, order.sku);
+          await this.deliveryService.deliver(item.id, item.sku);
         } catch (error) {
           this.logger.error(
-            `Error while order recovery, order ${order.id}, ${error}`,
+            `Error while order recovery, orderItem ${item.id}, ${error}`,
           );
         }
       }

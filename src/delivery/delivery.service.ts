@@ -4,6 +4,7 @@ import { GameKeysService } from '../game-keys/game-keys.service';
 import { DeliveryProvider, ProviderResponse } from './providers/prodiver.types';
 import { ProviderAService } from './providers/provider-a.service';
 import { ProviderBService } from './providers/provider-b.service';
+import { RefundService } from '../refund/refund.service';
 
 interface CallProvider {
   ok: boolean;
@@ -24,32 +25,34 @@ export class DeliveryService {
     private readonly gameKeysService: GameKeysService,
     private readonly providerA: ProviderAService,
     private readonly providerB: ProviderBService,
+    private readonly refundService: RefundService,
   ) {}
 
-  async deliver(orderId: string, sku: string): Promise<void> {
-    await this.prisma.order.update({
-      where: { id: orderId },
+  async deliver(orderItemId: string, sku: string): Promise<void> {
+    await this.prisma.orderItem.update({
+      where: { id: orderItemId },
       data: { status: 'delivering' },
     });
 
-    const existingCode = await this.gameKeysService.findKeyByOrderId(orderId);
+    const existingCode =
+      await this.gameKeysService.findKeyByOrderItemId(orderItemId);
 
     if (existingCode) {
-      await this.prisma.order.update({
-        where: { id: orderId },
+      await this.prisma.orderItem.update({
+        where: { id: orderItemId },
         data: { status: 'delivered' },
       });
 
-      this.logger.log(`Order ${orderId} already has a game key`);
+      this.logger.log(`OrderItem ${orderItemId} already has a game key`);
 
       return;
     }
 
-    let res = await this.callProvider(this.providerA, orderId, sku);
+    let res = await this.callProvider(this.providerA, orderItemId, sku);
     if (!res.ok && !res.outOfStock) {
-      this.logger.warn(`[provider A] error, order: ${orderId}`);
+      this.logger.warn(`[provider A] error, order: ${orderItemId}`);
 
-      res = await this.callProvider(this.providerB, orderId, sku);
+      res = await this.callProvider(this.providerB, orderItemId, sku);
     }
 
     const finalStatus = res.ok
@@ -58,32 +61,36 @@ export class DeliveryService {
         ? 'out_of_stock'
         : 'delivery_failed';
 
-    await this.prisma.order.update({
-      where: { id: orderId },
+    await this.prisma.orderItem.update({
+      where: { id: orderItemId },
       data: { status: finalStatus },
     });
 
     if (res.ok) {
-      this.logger.log(`Order ${orderId} delivered`);
+      this.logger.log(`OrderItem ${orderItemId} delivered`);
+
+      return;
     } else if (res.outOfStock) {
-      this.logger.warn(`Order ${orderId} out of stock, sku: ${sku}`);
+      this.logger.warn(`OrderItem ${orderItemId} out of stock, sku: ${sku}`);
     } else {
-      this.logger.error(`Provider error, order ${orderId} not delivered`);
+      this.logger.error(`Provider error, order ${orderItemId} not delivered`);
     }
+
+    await this.refundService.refundItem(orderItemId);
   }
 
   private async callProvider(
     provider: DeliveryProvider,
-    orderId: string,
+    orderItemId: string,
     sku: string,
   ): Promise<CallProvider> {
-    const requestId = `req_${orderId}_${provider.name}`;
+    const requestId = `req_${orderItemId}_${provider.name}`;
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       const res = await this.callWithTimeout(provider, {
         request_id: requestId,
         sku,
-        order_id: orderId,
+        order_id: orderItemId,
       });
 
       const status = res.status;
@@ -93,7 +100,7 @@ export class DeliveryService {
         data: {
           requestId,
           attemptNumber: attempt,
-          orderId,
+          orderItemId,
           provider: provider.name,
           status,
           code,
