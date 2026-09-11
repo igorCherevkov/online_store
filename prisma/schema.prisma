@@ -40,6 +40,13 @@ enum MoneyRecordType {
   refund
 }
 
+enum QueueStatus {
+  queued
+  processing
+  completed
+  failed
+}
+
 model Product {
   sku String @id
   name String
@@ -85,6 +92,7 @@ model OrderItem {
   gameKey GameKey?
   deliveryAttempts DeliveryAttempt[]
   moneyRecords MoneyRecord[]
+  queueEntry DeliveryQueue?
 
   @@index([orderId])
   @@index([status])
@@ -142,4 +150,18 @@ model MoneyRecord {
 
   @@unique([orderItemId, type])
   @@index([orderId])
+}
+
+model DeliveryQueue {
+  id String @id @default(cuid())
+  orderItemId String @unique
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id])
+  sku String
+  priority Int @default(0)
+  status QueueStatus @default(queued)
+  createdAt DateTime @default(now())
+  startedAt DateTime? 
+  completedAt DateTime?
+  
+  @@index([status, priority, createdAt])
 }

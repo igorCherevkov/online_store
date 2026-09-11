@@ -44,39 +44,61 @@ export class DeliveryService {
       });
 
       this.logger.log(`OrderItem ${orderItemId} already has a game key`);
+    } else {
+      let res = await this.callProvider(this.providerA, orderItemId, sku);
 
-      return;
+      if (!res.ok && !res.outOfStock) {
+        this.logger.warn(`[provider A] error, order: ${orderItemId}`);
+
+        res = await this.callProvider(this.providerB, orderItemId, sku);
+      }
+
+      const finalStatus = res.ok
+        ? 'delivered'
+        : res.outOfStock
+          ? 'out_of_stock'
+          : 'delivery_failed';
+
+      await this.prisma.orderItem.update({
+        where: { id: orderItemId },
+        data: { status: finalStatus },
+      });
+
+      if (res.ok) {
+        this.logger.log(`OrderItem ${orderItemId} delivered`);
+      } else if (res.outOfStock) {
+        this.logger.warn(`OrderItem ${orderItemId} out of stock, sku: ${sku}`);
+      } else {
+        this.logger.error(`Provider error, order ${orderItemId} not delivered`);
+      }
+
+      if (!res.ok) {
+        await this.refundService.refundItem(orderItemId);
+      }
     }
 
-    let res = await this.callProvider(this.providerA, orderItemId, sku);
-    if (!res.ok && !res.outOfStock) {
-      this.logger.warn(`[provider A] error, order: ${orderItemId}`);
+    await this.finalizeOrder(orderItemId);
+  }
 
-      res = await this.callProvider(this.providerB, orderItemId, sku);
-    }
-
-    const finalStatus = res.ok
-      ? 'delivered'
-      : res.outOfStock
-        ? 'out_of_stock'
-        : 'delivery_failed';
-
-    await this.prisma.orderItem.update({
+  private async finalizeOrder(orderItemId: string): Promise<void> {
+    const item = await this.prisma.orderItem.findUniqueOrThrow({
       where: { id: orderItemId },
-      data: { status: finalStatus },
     });
 
-    if (res.ok) {
-      this.logger.log(`OrderItem ${orderItemId} delivered`);
+    const items = await this.prisma.orderItem.findMany({
+      where: { orderId: item.orderId },
+    });
 
-      return;
-    } else if (res.outOfStock) {
-      this.logger.warn(`OrderItem ${orderItemId} out of stock, sku: ${sku}`);
-    } else {
-      this.logger.error(`Provider error, order ${orderItemId} not delivered`);
+    const checkDeliver = items.every(
+      (i) => i.status === 'delivered' || i.status === 'refunded',
+    );
+
+    if (checkDeliver) {
+      await this.prisma.order.update({
+        where: { id: item.orderId },
+        data: { status: 'completed' },
+      });
     }
-
-    await this.refundService.refundItem(orderItemId);
   }
 
   private async callProvider(

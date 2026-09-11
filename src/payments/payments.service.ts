@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DeliveryService } from '../delivery/delivery.service';
 import { PaymentWebhookDto } from './dto/payment-webhook.dto';
 import { Prisma } from '@prisma/client';
+import { DeliveryQueueService } from '../delivery/delivery-queue.service';
 
 interface OrderRow {
   id: string;
@@ -18,6 +19,7 @@ export class PaymentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly delivery: DeliveryService,
+    private readonly deliveryQueueService: DeliveryQueueService,
   ) {}
 
   async handleWebhook(dto: PaymentWebhookDto): Promise<{ status: string }> {
@@ -92,23 +94,8 @@ export class PaymentService {
     });
 
     if (out.shouldDeliver) {
-      await Promise.all(
-        out.items.map((item) => this.delivery.deliver(item.id, item.sku)),
-      );
-
-      const items = await this.prisma.orderItem.findMany({
-        where: { orderId: out.orderId },
-      });
-
-      const checkDeliver = items.every(
-        (i) => i.status === 'delivered' || i.status === 'refunded',
-      );
-
-      if (checkDeliver) {
-        await this.prisma.order.update({
-          where: { id: out.orderId },
-          data: { status: 'completed' },
-        });
+      for (const item of out.items) {
+        await this.deliveryQueueService.push(item.id, item.sku, 0);
       }
     }
 

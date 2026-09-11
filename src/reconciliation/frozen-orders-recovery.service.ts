@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ReconciliationService } from './reconciliation.service';
-import { DeliveryService } from '../delivery/delivery.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { DeliveryQueueService } from '../delivery/delivery-queue.service';
 
 @Injectable()
 export class FrozenOrdersRecovery {
@@ -11,7 +11,7 @@ export class FrozenOrdersRecovery {
 
   constructor(
     private readonly reconciliationService: ReconciliationService,
-    private readonly deliveryService: DeliveryService,
+    private readonly deliveryQueueService: DeliveryQueueService,
   ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
@@ -34,17 +34,7 @@ export class FrozenOrdersRecovery {
       this.logger.log(`Count of frozen order items: ${frozenItems.length}`);
 
       for (const item of frozenItems) {
-        try {
-          this.logger.log(
-            `Retry attempt: orderItem ${item.id}, status: ${item.status}`,
-          );
-
-          await this.deliveryService.deliver(item.id, item.sku);
-        } catch (error) {
-          this.logger.error(
-            `Error while order recovery, orderItem ${item.id}, ${error}`,
-          );
-        }
+        await this.deliveryQueueService.push(item.id, item.sku, 1);
       }
     } finally {
       this.isRunning = false;
