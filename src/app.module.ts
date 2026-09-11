@@ -7,6 +7,8 @@ import { GameKeysModule } from './game-keys/game-keys.module';
 import { PaymentModule } from './payments/payments.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { RefundModule } from './refund/refund.module';
+import { StatusHistoryModule } from './status-history/status-history.module';
+import { DeliveryModule } from './delivery/delivery.module';
 
 @Module({
   imports: [
@@ -18,8 +20,10 @@ import { RefundModule } from './refund/refund.module';
     OrdersModule,
     GameKeysModule,
     PaymentModule,
+    DeliveryModule,
 
     RefundModule,
+    StatusHistoryModule,
 
     ReconciliationModule,
   ],

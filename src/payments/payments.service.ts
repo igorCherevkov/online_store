@@ -4,6 +4,7 @@ import { DeliveryService } from '../delivery/delivery.service';
 import { PaymentWebhookDto } from './dto/payment-webhook.dto';
 import { Prisma } from '@prisma/client';
 import { DeliveryQueueService } from '../delivery/delivery-queue.service';
+import { StatusHistoryService } from '../status-history/status-history.service';
 
 interface OrderRow {
   id: string;
@@ -18,8 +19,8 @@ export class PaymentService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly delivery: DeliveryService,
     private readonly deliveryQueueService: DeliveryQueueService,
+    private readonly statusHistoryService: StatusHistoryService,
   ) {}
 
   async handleWebhook(dto: PaymentWebhookDto): Promise<{ status: string }> {
@@ -69,6 +70,13 @@ export class PaymentService {
           data: { status: 'payment_failed' },
         });
 
+        await this.statusHistoryService.writeOrderItemStatus(
+          order.id,
+          order.status,
+          'payment_failed',
+          tx,
+        );
+
         return { shouldDeliver: false };
       }
 
@@ -85,6 +93,13 @@ export class PaymentService {
         where: { id: order.id },
         data: { status: 'paid' },
       });
+
+      await this.statusHistoryService.writeOrderStatus(
+        order.id,
+        order.status,
+        'paid',
+        tx,
+      );
 
       const items = await tx.orderItem.findMany({
         where: { orderId: order.id },

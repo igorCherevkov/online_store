@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { StatusHistoryService } from '../status-history/status-history.service';
 
 @Injectable()
 export class RefundService {
   private readonly logger = new Logger(RefundService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly statusHistoryService: StatusHistoryService,
+  ) {}
 
   async refundItem(orderItemId: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
@@ -47,6 +51,13 @@ export class RefundService {
         where: { id: orderItemId },
         data: { status: 'refunded' },
       });
+
+      await this.statusHistoryService.writeOrderItemStatus(
+        orderItemId,
+        item.status,
+        'refunded',
+        tx,
+      );
 
       this.logger.log(
         `[refund] ${orderItemId} refunded, amount=${item.amount}`,

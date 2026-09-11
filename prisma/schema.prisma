@@ -47,6 +47,11 @@ enum QueueStatus {
   failed
 }
 
+enum EntityType {
+  order
+  order_item
+}
+
 model Product {
   sku String @id
   name String
@@ -164,4 +169,15 @@ model DeliveryQueue {
   completedAt DateTime?
   
   @@index([status, priority, createdAt])
+}
+
+model StatusEvent {
+  id String @id @default(cuid())
+  entityType EntityType
+  entityId String
+  oldStatus String?
+  newStatus String
+  createdAt DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
 }

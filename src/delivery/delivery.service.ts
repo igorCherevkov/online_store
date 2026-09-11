@@ -5,6 +5,7 @@ import { DeliveryProvider, ProviderResponse } from './providers/prodiver.types';
 import { ProviderAService } from './providers/provider-a.service';
 import { ProviderBService } from './providers/provider-b.service';
 import { RefundService } from '../refund/refund.service';
+import { StatusHistoryService } from '../status-history/status-history.service';
 
 interface CallProvider {
   ok: boolean;
@@ -26,6 +27,7 @@ export class DeliveryService {
     private readonly providerA: ProviderAService,
     private readonly providerB: ProviderBService,
     private readonly refundService: RefundService,
+    private readonly statusHistoryService: StatusHistoryService,
   ) {}
 
   async deliver(orderItemId: string, sku: string): Promise<void> {
@@ -33,6 +35,12 @@ export class DeliveryService {
       where: { id: orderItemId },
       data: { status: 'delivering' },
     });
+
+    await this.statusHistoryService.writeOrderItemStatus(
+      orderItemId,
+      'pending',
+      'delivering',
+    );
 
     const existingCode =
       await this.gameKeysService.findKeyByOrderItemId(orderItemId);
@@ -63,6 +71,12 @@ export class DeliveryService {
         where: { id: orderItemId },
         data: { status: finalStatus },
       });
+
+      await this.statusHistoryService.writeOrderItemStatus(
+        orderItemId,
+        'delivering',
+        finalStatus,
+      );
 
       if (res.ok) {
         this.logger.log(`OrderItem ${orderItemId} delivered`);
@@ -98,6 +112,12 @@ export class DeliveryService {
         where: { id: item.orderId },
         data: { status: 'completed' },
       });
+
+      await this.statusHistoryService.writeOrderStatus(
+        item.orderId,
+        'paid',
+        'completed',
+      );
     }
   }
 

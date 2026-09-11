@@ -8,9 +8,10 @@ import { DeliveryQueueController } from './delivery-queue.controller';
 import { RefundService } from '../refund/refund.service';
 import { DeliveryQueueService } from './delivery-queue.service';
 import { RateLimiterService } from './rate-limiter.service';
+import { StatusHistoryModule } from '../status-history/status-history.module';
 
 @Module({
-  imports: [GameKeysModule, RefundModule],
+  imports: [GameKeysModule, RefundModule, StatusHistoryModule],
   controllers: [DeliveryQueueController],
   providers: [
     DeliveryService,
