@@ -104,7 +104,7 @@ curl http://localhost:3000/products
 ```bash
 curl -X POST http://localhost:3000/orders \
   -H "Content-Type: application/json" \
-  -d '{"sku": "GIFT-PSN-1000"}'
+  -d '{items: [{"sku": "GIFT-PSN-1000"}]}'
 ```
 
 Ответ содержит `id` - используется дальше как `order_id`.
